@@ -3,6 +3,9 @@ name: EAS Build (Android)
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
   workflow_dispatch:
     inputs:
       profile:

@@ -4,6 +4,31 @@ Android app to manage members and payments across multiple gyms: GPay/cash payme
 
 Built with **React Native + Expo** (SDK 53, expo-router, expo-sqlite). All data is stored on the phone in SQLite.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-dashboard.png" width="200" alt="Home dashboard"><br><sub>Home</sub></td>
+    <td align="center"><img src="docs/screenshots/02-members.png" width="200" alt="Members list"><br><sub>Members</sub></td>
+    <td align="center"><img src="docs/screenshots/03-member-detail.png" width="200" alt="Member detail"><br><sub>Member detail</sub></td>
+    <td align="center"><img src="docs/screenshots/04-record-payment.png" width="200" alt="Record payment"><br><sub>Record payment</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/05-whatsapp-reminders.png" width="200" alt="WhatsApp reminders"><br><sub>WhatsApp reminders</sub></td>
+    <td align="center"><img src="docs/screenshots/06-add-member.png" width="200" alt="Add member"><br><sub>Add member</sub></td>
+    <td align="center"><img src="docs/screenshots/06b-add-existing-member.png" width="200" alt="Add existing member"><br><sub>Add existing member</sub></td>
+    <td align="center"><img src="docs/screenshots/08-reports.png" width="200" alt="Reports"><br><sub>Reports</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/07-settings-backup.png" width="200" alt="Settings and backup"><br><sub>Settings &amp; backup</sub></td>
+    <td align="center"><img src="docs/screenshots/09-app-lock.png" width="200" alt="App lock"><br><sub>App lock</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
+
+<sub>Screens from the MyGym app design; sample data only.</sub>
+
 ## What's in the app
 
 | Screen | What it does |
