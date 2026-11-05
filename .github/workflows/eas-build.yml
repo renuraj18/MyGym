@@ -42,7 +42,7 @@ jobs:
         run: npx expo-doctor || true
 
       - name: Check JS bundle (same step that failed on EAS)
-        run: npx expo export --platform android --output-dir /tmp/export-check
+        run: npx expo export --platform android --output-dir .export-check
 
       - name: Start EAS build
         run: eas build -p android --profile ${{ inputs.profile || 'production' }} --non-interactive --no-wait
