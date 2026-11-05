@@ -6,13 +6,14 @@ import { Button, Card, Chip, Feather, Field, IconButton, Muted, NavItem, Screen,
 import { useApp } from '@/context/app';
 import { backupNow, connectGoogle, disconnectGoogle, restoreFromSheet, sheetUrl } from '@/lib/backup';
 import { clearPin } from '@/lib/lock';
+import { clearAllData, loadDemoData } from '@/lib/demo';
 import { fmtDate, toISO } from '@/lib/dates';
 import { C } from '@/theme';
 
 export default function Settings() {
   const db = useSQLiteContext();
-  const { settings, updateSetting, gyms, reload } = useApp();
-  const [busy, setBusy] = useState<'backup' | 'restore' | 'connect' | null>(null);
+  const { settings, updateSetting, gyms, reload, setGymId } = useApp();
+  const [busy, setBusy] = useState<'backup' | 'restore' | 'connect' | 'demo' | 'clear' | null>(null);
   const [upi, setUpi] = useState(settings.upi_id);
   const [prefix, setPrefix] = useState(settings.receipt_prefix);
 
@@ -58,6 +59,40 @@ export default function Settings() {
           Alert.alert('Restored', `${r.members} members and ${r.payments} payments restored.`);
         } catch (e: any) {
           Alert.alert('Restore failed', e?.message ?? 'Try again.');
+        } finally { setBusy(null); }
+      },
+    },
+  ]);
+
+  const runDemo = () => Alert.alert('Load demo data?', 'Replaces everything on this phone with 3 sample gyms, 300 members and their payments. Use this only for testing.', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Load demo data', style: 'destructive', onPress: async () => {
+        setBusy('demo');
+        try {
+          const r = await loadDemoData(db);
+          setGymId(null);
+          await reload();
+          Alert.alert('Demo data loaded', `${r.gyms} gyms, ${r.members} members and ${r.payments} payments added.`);
+        } catch (e: any) {
+          Alert.alert('Could not load demo data', e?.message ?? 'Try again.');
+        } finally { setBusy(null); }
+      },
+    },
+  ]);
+
+  const runClear = () => Alert.alert('Delete all data?', 'Removes every gym, member and payment from this phone. Your settings and Google backup sheet are kept. This cannot be undone.', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Delete everything', style: 'destructive', onPress: async () => {
+        setBusy('clear');
+        try {
+          await clearAllData(db);
+          setGymId(null);
+          await reload();
+          Alert.alert('All data deleted', 'You can now add your real gyms and members.');
+        } catch (e: any) {
+          Alert.alert('Could not delete', e?.message ?? 'Try again.');
         } finally { setBusy(null); }
       },
     },
@@ -152,6 +187,15 @@ export default function Settings() {
           </View>
         </View>
         <NavItem label="WhatsApp message templates" sub="Reminder and receipt" onPress={() => router.push('/templates')} last />
+      </Card>
+
+      <Section>Testing</Section>
+      <Card style={{ gap: 12 }}>
+        <Muted>Fill the app with 3 sample gyms and 100 members each, with random plans, payments, balances and due dates, to try out Reports and Reminders.</Muted>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button title="Load demo data" kind="dark" style={{ flex: 1, height: 48 }} loading={busy === 'demo'} onPress={runDemo} />
+          <Button title="Delete all data" kind="danger" style={{ flex: 1, height: 48 }} loading={busy === 'clear'} onPress={runClear} />
+        </View>
       </Card>
 
       <Muted style={{ textAlign: 'center', marginTop: 8 }}>MyGym 1.0 · data is stored on this phone</Muted>
