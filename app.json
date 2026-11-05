@@ -13,7 +13,7 @@
       "package": "com.renuraj.mygym",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#C2410C"
       },
       "permissions": [
         "android.permission.CAMERA",
