@@ -6,12 +6,14 @@
     "scheme": "mygym",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "android": {
       "package": "com.renuraj.mygym",
       "adaptiveIcon": {
-        "backgroundColor": "#C2410C"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#15171C"
       },
       "permissions": [
         "android.permission.CAMERA",
