@@ -44,5 +44,12 @@ jobs:
       - name: Check JS bundle (same step that failed on EAS)
         run: npx expo export --platform android --output-dir .export-check
 
+      - name: Link EAS project (if app.json has no projectId yet)
+        run: |
+          if ! grep -q '"projectId"' app.json; then
+            eas init --non-interactive --force
+            echo "Linked project:"; grep -A2 '"eas"' app.json
+          fi
+
       - name: Start EAS build
         run: eas build -p android --profile ${{ inputs.profile || 'production' }} --non-interactive --no-wait

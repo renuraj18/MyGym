@@ -2,6 +2,7 @@
   "expo": {
     "name": "MyGym",
     "slug": "mygym",
+    "owner": "renuraj18",
     "scheme": "mygym",
     "version": "1.0.0",
     "orientation": "portrait",
