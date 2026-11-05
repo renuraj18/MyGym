@@ -1,0 +1,30 @@
+export const C = {
+  bg: '#F4F3EE',
+  card: '#FFFFFF',
+  ink: '#15171C',
+  muted: '#5B5F68',
+  line: '#ECEAE3',
+  border: '#D9D7CF',
+  brand: '#C2410C',
+  brandSoft: '#FDE7D9',
+  accent: '#F97316',
+  green: '#15803D',
+  greenSoft: '#E7F6EC',
+  paidBg: '#DFF3E6',
+  paidFg: '#166534',
+  dueBg: '#FEF0D7',
+  dueFg: '#92400E',
+  amber: '#B45309',
+  overBg: '#FDE2E2',
+  overFg: '#991B1B',
+  red: '#B91C1C',
+  gpay: '#1D4ED8',
+  gpayBg: '#E0ECFF',
+  dark: '#15171C',
+  dark2: '#24272E',
+  darkMuted: '#C9CBD1',
+};
+
+export const font = {
+  display: { fontWeight: '700' as const, color: C.ink },
+};
