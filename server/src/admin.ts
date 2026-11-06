@@ -67,6 +67,22 @@ export const ADMIN_HTML = `<!doctype html>
   </div>
 
   <div class="card">
+    <h2>Plans & prices</h2>
+    <p class="muted" style="margin-top:-6px">Shown on the app's License screen. Changes reach every phone the next time it opens the License screen.</p>
+    <form id="plans" class="row">
+      <label>Yearly price<input name="yearlyPrice" placeholder="₹500"></label>
+      <label style="flex:1">Yearly description<input name="yearlySummary"></label>
+      <label>Lifetime price<input name="lifetimePrice" placeholder="₹2,000"></label>
+      <label style="flex:1">Lifetime description<input name="lifetimeSummary"></label>
+      <label>UPI ID<input name="upi" placeholder="name@ybl"></label>
+      <label>WhatsApp for payments<input name="whatsapp" placeholder="919876543210" inputmode="tel"></label>
+      <label style="flex-basis:100%">How to pay (shown in the app)<input name="paymentInfo"></label>
+      <button type="submit">Save plans</button>
+    </form>
+    <div id="plansMsg" class="muted"></div>
+  </div>
+
+  <div class="card">
     <h2>License keys</h2>
     <div class="row" style="margin-bottom:10px"><input id="q" placeholder="Search name, phone or key" style="flex:1"></div>
     <div class="tablewrap"><table>
@@ -170,9 +186,26 @@ function render() {
   $('today').textContent = 'Today (IST): ' + fmtDay(data.today) + (data.paymentInfo ? ' · ' + data.paymentInfo : '');
 }
 
-async function load() {
-  try { data = await api('/admin/api/data'); render(); } catch (e) { $('msg').textContent = e.message; }
+let plansFilled = false;
+function fillPlans() {
+  if (plansFilled || !data.config) return;
+  const f = $('plans');
+  for (const [k, v] of Object.entries(data.config)) if (f.elements[k]) f.elements[k].value = v;
+  plansFilled = true;
 }
+
+async function load() {
+  try { data = await api('/admin/api/data'); render(); fillPlans(); } catch (e) { $('msg').textContent = e.message; }
+}
+
+$('plans').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  try {
+    await api('/admin/api/config', Object.fromEntries(new FormData(ev.target)));
+    $('plansMsg').textContent = 'Saved. Phones see the new plans next time they open the License screen.';
+    await load();
+  } catch (e) { $('plansMsg').textContent = e.message; }
+});
 
 $('create').addEventListener('submit', async (ev) => {
   ev.preventDefault();

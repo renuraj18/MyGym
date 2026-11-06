@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import * as Application from 'expo-application';
 import * as SecureStore from 'expo-secure-store';
 import { addDays, daysBetween, today } from '@/lib/dates';
+import { savePlans } from '@/lib/plans';
 
 /**
  * Licensing: every phone gets a 7-day trial the first time it opens the app (tracked by the license
@@ -17,7 +18,8 @@ const TRIAL_DAYS = 7;
 const CACHE_KEY = 'mygym_license_v1';
 const FIRST_OPEN_KEY = 'mygym_first_open';
 
-export type Plan = { id: string; name: string; summary: string; price: string };
+export type { Plan } from '@/lib/plans';
+import type { Plan } from '@/lib/plans';
 export type LicenseInfo = { key: string; plan: 'yearly' | 'lifetime'; planName: string; expires: string | null; client: string; revoked: boolean };
 
 type ServerStatus = {
@@ -77,6 +79,7 @@ async function readCache(): Promise<Cache | null> {
 }
 
 async function writeCache(s: ServerStatus) {
+  await savePlans(s);
   await SecureStore.setItemAsync(CACHE_KEY, JSON.stringify({ ...s, checkedAt: Date.now() }));
 }
 

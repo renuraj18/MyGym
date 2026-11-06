@@ -4,23 +4,24 @@ import { router } from 'expo-router';
 import { Button, Card, Feather, Field, IconButton, Muted, Screen, Section } from '@/components/ui';
 import { useLicense } from '@/context/license';
 import { deviceInfo } from '@/lib/license';
+import { cachedPlans, fetchPlans, Plan, PlanDetails, upiLink } from '@/lib/plans';
 import { fmtDate } from '@/lib/dates';
 import { C } from '@/theme';
-
-const priceNumber = (p: string) => {
-  const n = Number(String(p).replace(/[^\d.]/g, ''));
-  return Number.isFinite(n) && n > 0 ? n : null;
-};
 
 export default function LicenseScreen() {
   const { view, refresh, activate } = useLicense();
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState<'activate' | 'refresh' | null>(null);
   const [device, setDevice] = useState<{ id: string; model: string } | null>(null);
+  const [plans, setPlans] = useState<PlanDetails | null>(null);
+  const [plansError, setPlansError] = useState(false);
 
   useEffect(() => {
     deviceInfo().then(setDevice);
     refresh();
+    // Show the last known plans straight away, then the latest prices from the license server.
+    cachedPlans().then((c) => c && setPlans((p) => p ?? c));
+    fetchPlans().then((d) => { setPlans(d); setPlansError(false); }).catch(() => setPlansError(true));
   }, [refresh]);
 
   const onActivate = async () => {
@@ -59,15 +60,15 @@ export default function LicenseScreen() {
       : lic?.revoked ? 'This license was cancelled. Contact support.'
         : `Ended ${fmtDate(lic?.expires ?? view.trialEnds, true)}. You can still view your data and back it up.`;
 
-  const payUpi = (planName: string, price: string) => {
-    const am = priceNumber(price);
-    const url = `upi://pay?pa=${encodeURIComponent(view.upi)}&pn=${encodeURIComponent('MyGym')}&cu=INR&tn=${encodeURIComponent(`MyGym ${planName} license`)}${am ? `&am=${am}` : ''}`;
-    Linking.openURL(url).catch(() => Alert.alert('No UPI app found', `Pay to UPI ID ${view.upi} from any UPI app.`));
+  const pay: PlanDetails = plans ?? { plans: [], paymentInfo: '', upi: '', whatsapp: '', fetchedAt: 0 };
+
+  const payUpi = (plan: Plan) => {
+    Linking.openURL(upiLink(pay, plan)).catch(() => Alert.alert('No UPI app found', `Pay ${plan.price} to UPI ID ${pay.upi} from any UPI app.`));
   };
 
   const sendScreenshot = () => {
     const text = `Hi, I have paid for MyGym. Please send my license key.\nPhone: ${device?.model ?? ''}\nDevice ID: ${device?.id ?? ''}`;
-    Linking.openURL(`https://wa.me/${view.whatsapp}?text=${encodeURIComponent(text)}`);
+    Linking.openURL(`https://wa.me/${pay.whatsapp}?text=${encodeURIComponent(text)}`);
   };
 
   return (
@@ -98,22 +99,23 @@ export default function LicenseScreen() {
         <>
           <Section>How to get a key</Section>
           <Card style={{ gap: 14 }}>
-            {view.plans.map((p) => (
+            {pay.plans.map((p) => (
               <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 15, fontWeight: '700', color: C.ink }}>{p.name}{p.price ? ` · ${p.price}` : ''}</Text>
                   <Muted>{p.summary}</Muted>
                 </View>
-                {!!view.upi && <Button title="Pay by UPI" kind="dark" style={{ height: 40 }} onPress={() => payUpi(p.name, p.price)} />}
+                {!!pay.upi && <Button title={p.amount ? `Pay ₹${p.amount.toLocaleString('en-IN')}` : 'Pay by UPI'} kind="dark" style={{ height: 40 }} onPress={() => payUpi(p)} />}
               </View>
             ))}
-            {!!view.paymentInfo && <Muted>{view.paymentInfo}</Muted>}
-            {!!view.upi && <Text style={{ fontSize: 13, color: C.ink }}>UPI ID: <Text style={{ fontWeight: '700' }}>{view.upi}</Text></Text>}
-            {!!view.whatsapp && (
+            {!!pay.paymentInfo && <Muted>{pay.paymentInfo}</Muted>}
+            {!!pay.upi && <Text style={{ fontSize: 13, color: C.ink }}>UPI ID: <Text style={{ fontWeight: '700' }}>{pay.upi}</Text></Text>}
+            {!!pay.whatsapp && (
               <Button title="Send payment screenshot on WhatsApp" kind="green" onPress={sendScreenshot}
                 icon={<Feather name="message-circle" size={16} color="#FFF" />} />
             )}
-            {!view.plans.length && <Muted>Connect to the internet to see plans and prices.</Muted>}
+            {!pay.plans.length && <Muted>{plansError ? 'Could not load plans. Connect to the internet and open this screen again.' : 'Loading plans…'}</Muted>}
+            {!!pay.plans.length && plansError && <Muted>Showing saved prices; connect to the internet for the latest.</Muted>}
           </Card>
         </>
       ) : null}

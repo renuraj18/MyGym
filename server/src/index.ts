@@ -68,7 +68,7 @@ export default {
     try {
       if (pathname === '/api/status' && req.method === 'POST') return await status(req, env);
       if (pathname === '/api/activate' && req.method === 'POST') return await activate(req, env);
-      if (pathname === '/api/plans' && req.method === 'GET') return json(plansInfo(env));
+      if (pathname === '/api/plans' && req.method === 'GET') return json(await plansInfo(env));
       if (pathname === '/admin' || pathname.startsWith('/admin/')) {
         const denied = auth(req, env);
         if (denied) return denied;
@@ -87,16 +87,51 @@ export default {
 
 // ---------- app endpoints ----------
 
-function plansInfo(env: Env) {
+/** Plans and payment details. Edited on the admin page (stored in KV); wrangler.toml [vars] are the defaults. */
+interface PlanConfig {
+  yearlyPrice: string;
+  yearlySummary: string;
+  lifetimePrice: string;
+  lifetimeSummary: string;
+  paymentInfo: string;
+  upi: string;
+  whatsapp: string;
+}
+
+function defaultConfig(env: Env): PlanConfig {
   return {
-    plans: [
-      { id: 'yearly', name: 'Yearly', summary: '12 months from activation', price: env.PRICE_YEARLY?.trim() || '' },
-      { id: 'lifetime', name: 'Lifetime', summary: 'Pay once, never expires', price: env.PRICE_LIFETIME?.trim() || '' },
-    ],
+    yearlyPrice: env.PRICE_YEARLY?.trim() || '',
+    yearlySummary: '12 months from activation',
+    lifetimePrice: env.PRICE_LIFETIME?.trim() || '',
+    lifetimeSummary: 'Pay once, never expires',
     paymentInfo: env.PAYMENT_INFO?.trim() || DEFAULT_PAYMENT_INFO,
     upi: env.UPI_ID?.trim() || '',
     whatsapp: (env.WHATSAPP ?? '').replace(/\D/g, ''),
   };
+}
+
+async function getConfig(env: Env): Promise<PlanConfig> {
+  const saved = (await env.LICENSES.get<Partial<PlanConfig>>('config:plans', 'json')) ?? {};
+  return { ...defaultConfig(env), ...saved };
+}
+
+/** What the app shows on its License screen (GET /api/plans, and included in every status reply). */
+async function plansInfo(env: Env) {
+  const c = await getConfig(env);
+  return {
+    plans: [
+      { id: 'yearly', name: 'Yearly', summary: c.yearlySummary, price: c.yearlyPrice, amount: rupees(c.yearlyPrice) },
+      { id: 'lifetime', name: 'Lifetime', summary: c.lifetimeSummary, price: c.lifetimePrice, amount: rupees(c.lifetimePrice) },
+    ],
+    paymentInfo: c.paymentInfo,
+    upi: c.upi,
+    whatsapp: c.whatsapp,
+  };
+}
+
+function rupees(price: string): number | null {
+  const n = Number(String(price).replace(/[^\d.]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
@@ -149,7 +184,7 @@ async function touchDevice(env: Env, id: string, body: Record<string, unknown>):
   return dev;
 }
 
-function describe(env: Env, dev: Device, lic: License | null) {
+async function describe(env: Env, dev: Device, lic: License | null) {
   const today = todayIST();
   const usable = lic && !lic.revoked && lic.device === dev.id && (lic.expires === null || lic.expires >= today);
   let state: 'active' | 'trial' | 'expired';
@@ -163,7 +198,7 @@ function describe(env: Env, dev: Device, lic: License | null) {
     license: lic && lic.device === dev.id
       ? { key: lic.key, plan: lic.plan, planName: PLAN_NAMES[lic.plan], expires: lic.expires, client: lic.client, revoked: lic.revoked }
       : null,
-    ...plansInfo(env),
+    ...(await plansInfo(env)),
   };
 }
 
@@ -177,7 +212,7 @@ async function status(req: Request, env: Env) {
     lic.lastCheck = Date.now();
     await env.LICENSES.put(`lic:${lic.key}`, JSON.stringify(lic));
   }
-  return json(describe(env, dev, lic));
+  return json(await describe(env, dev, lic));
 }
 
 async function activate(req: Request, env: Env) {
@@ -216,7 +251,7 @@ async function activate(req: Request, env: Env) {
   dev.license = lic.key;
   await env.LICENSES.put(`lic:${lic.key}`, JSON.stringify(lic));
   await env.LICENSES.put(`dev:${id}`, JSON.stringify(dev));
-  return json(describe(env, dev, lic));
+  return json(await describe(env, dev, lic));
 }
 
 // ---------- admin ----------
@@ -238,7 +273,25 @@ async function admin(req: Request, env: Env, pathname: string): Promise<Response
     const [licenses, devices] = await Promise.all([listAll<License>(env, 'lic:'), listAll<Device>(env, 'dev:')]);
     licenses.sort((a, b) => b.createdAt - a.createdAt);
     devices.sort((a, b) => b.lastSeen - a.lastSeen);
-    return json({ today: todayIST(), licenses, devices, ...plansInfo(env) });
+    const config = await getConfig(env);
+    return json({ today: todayIST(), licenses, devices, config, ...(await plansInfo(env)) });
+  }
+
+  if (pathname === '/admin/api/config' && req.method === 'POST') {
+    const body = (await readBody(req)) ?? {};
+    const cur = await getConfig(env);
+    const str = (k: keyof PlanConfig, n: number) => (typeof body[k] === 'string' ? String(body[k]).trim().slice(0, n) : cur[k]);
+    const next: PlanConfig = {
+      yearlyPrice: str('yearlyPrice', 30),
+      yearlySummary: str('yearlySummary', 80),
+      lifetimePrice: str('lifetimePrice', 30),
+      lifetimeSummary: str('lifetimeSummary', 80),
+      paymentInfo: str('paymentInfo', 400),
+      upi: str('upi', 60),
+      whatsapp: str('whatsapp', 20).replace(/\D/g, ''),
+    };
+    await env.LICENSES.put('config:plans', JSON.stringify(next));
+    return json(next);
   }
 
   if (pathname === '/admin/api/licenses' && req.method === 'POST') {
