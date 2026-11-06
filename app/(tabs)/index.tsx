@@ -11,6 +11,7 @@ import { markReminded, memberStatus, summarize } from '@/db/repo';
 import { endOfMonth, startOfMonth, today, weekdayDate } from '@/lib/dates';
 import { inr } from '@/lib/format';
 import { openWhatsApp, reminderText } from '@/lib/whatsapp';
+import { LicenseBanner } from '@/components/LicenseBanner';
 import { C } from '@/theme';
 
 export default function Dashboard() {
@@ -55,8 +56,9 @@ export default function Dashboard() {
         <Card style={{ gap: 12 }}>
           <Text style={{ fontSize: 15, color: C.ink }}>Start by adding your gyms and their plan fees. You can add more branches any time.</Text>
           <Button title="Add my gyms" onPress={() => router.push('/gyms')} />
-          <Button title="Restore from Google Sheets backup" kind="outline" onPress={() => router.push('/settings')} />
+          <Button title="Restore from a backup" kind="outline" onPress={() => router.push('/settings')} />
         </Card>
+        <LicenseBanner />
       </Screen>
     );
   }
@@ -71,6 +73,7 @@ export default function Dashboard() {
           </View>
           <IconButton name="settings" label="Settings" onPress={() => router.push('/settings')} />
         </View>
+        <LicenseBanner />
         <GymPicker gyms={gyms} value={gymId} onChange={setGymId} allowAll />
 
         <View style={{ backgroundColor: C.dark, borderRadius: 20, padding: 18, gap: 10 }}>

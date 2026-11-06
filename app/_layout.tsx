@@ -6,6 +6,7 @@ import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { migrate } from '@/db/schema';
 import { AppProvider, useApp } from '@/context/app';
+import { LicenseProvider } from '@/context/license';
 import { LockScreen } from '@/components/LockScreen';
 import { hasPin } from '@/lib/lock';
 import { maybeAutoBackup } from '@/lib/backup';
@@ -54,6 +55,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <SQLiteProvider databaseName="mygym.db" onInit={migrate}>
         <AppProvider>
+          <LicenseProvider>
           <StatusBar style="dark" />
           <Gate>
             <Stack
@@ -64,6 +66,7 @@ export default function RootLayout() {
               }}
             />
           </Gate>
+          </LicenseProvider>
         </AppProvider>
       </SQLiteProvider>
     </SafeAreaProvider>

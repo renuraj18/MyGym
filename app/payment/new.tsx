@@ -15,6 +15,8 @@ import { inr, parseAmount } from '@/lib/format';
 import { maybeAutoBackup } from '@/lib/backup';
 import { openWhatsApp, receiptText } from '@/lib/whatsapp';
 import { C } from '@/theme';
+import { useLicense } from '@/context/license';
+import { LicenseEnded } from '@/components/LicenseBanner';
 
 const PLAN_OPTS = (['monthly', 'quarterly', 'halfyearly', 'yearly', 'custom', 'tilldate'] as PlanType[]).map((v) => ({ value: v, label: PLAN_LABEL[v] }));
 const PLAN_SUB: Partial<Record<PlanType, string>> = {
@@ -29,7 +31,7 @@ function defaultFrom(m: Member): string {
   return daysBetween(next, now) > 30 ? now : next;
 }
 
-export default function RecordPayment() {
+function RecordPayment() {
   const params = useLocalSearchParams<{ memberId?: string; balanceOnly?: string; first?: string }>();
   const db = useSQLiteContext();
   const { gyms, settings } = useApp();
@@ -229,4 +231,9 @@ function PickMember({ onPick }: { onPick: (m: Member) => void }) {
       <Button title="New member" kind="outline" onPress={() => router.replace('/member/new')} />
     </Screen>
   );
+}
+
+export default function GatedRecordPayment() {
+  const { canEdit } = useLicense();
+  return canEdit ? <RecordPayment /> : <LicenseEnded what="record payments" />;
 }

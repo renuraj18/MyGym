@@ -13,10 +13,12 @@ import { addDays, fmtDate, periodEnd, today } from '@/lib/dates';
 import { inr, normalizePhone, parseAmount } from '@/lib/format';
 import { choosePhoto } from '@/lib/photos';
 import { C } from '@/theme';
+import { useLicense } from '@/context/license';
+import { LicenseEnded } from '@/components/LicenseBanner';
 
 const PLAN_OPTS = (['monthly', 'quarterly', 'halfyearly', 'yearly', 'custom', 'tilldate'] as PlanType[]).map((v) => ({ value: v, label: PLAN_LABEL[v] }));
 
-export default function MemberForm() {
+function MemberForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editing = !!id;
   const db = useSQLiteContext();
@@ -167,4 +169,9 @@ export default function MemberForm() {
       <Button title={editing ? 'Save changes' : existing ? 'Save member' : 'Save & record first payment'} onPress={save} loading={saving} style={{ marginTop: 8, height: 56 }} />
     </Screen>
   );
+}
+
+export default function GatedMemberForm() {
+  const { canEdit } = useLicense();
+  return canEdit ? <MemberForm /> : <LicenseEnded what="add or edit members" />;
 }

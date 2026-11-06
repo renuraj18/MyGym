@@ -7,6 +7,7 @@ import { useApp } from '@/context/app';
 import { deleteGym, Gym, saveGym } from '@/db/repo';
 import { inr, parseAmount } from '@/lib/format';
 import { C } from '@/theme';
+import { useLicense } from '@/context/license';
 
 type Draft = { id?: number; name: string; m: string; q: string; h: string; y: string };
 const empty: Draft = { name: '', m: '', q: '', h: '', y: '' };
@@ -15,9 +16,11 @@ const toDraft = (g: Gym): Draft => ({ id: g.id, name: g.name, m: String(g.fee_mo
 export default function Gyms() {
   const db = useSQLiteContext();
   const { gyms, reload } = useApp();
+  const { requireEdit } = useLicense();
   const [draft, setDraft] = useState<Draft | null>(gyms.length === 0 ? { ...empty } : null);
 
   const save = async () => {
+    if (!requireEdit()) return;
     if (!draft?.name.trim()) return Alert.alert('Name needed', 'Enter the gym or branch name.');
     await saveGym(db, {
       id: draft.id, name: draft.name.trim(),
@@ -28,7 +31,7 @@ export default function Gyms() {
     setDraft(null);
   };
 
-  const remove = (g: Gym) => Alert.alert(`Delete ${g.name}?`, undefined, [
+  const remove = (g: Gym) => requireEdit() && Alert.alert(`Delete ${g.name}?`, undefined, [
     { text: 'Cancel', style: 'cancel' },
     {
       text: 'Delete', style: 'destructive', onPress: async () => {

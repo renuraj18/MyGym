@@ -4,16 +4,17 @@ import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Button, Card, Chip, Feather, Field, IconButton, Muted, NavItem, Screen, Section, Toggle } from '@/components/ui';
 import { useApp } from '@/context/app';
-import { backupNow, connectGoogle, disconnectGoogle, restoreFromSheet, sheetUrl } from '@/lib/backup';
+import { backupNow, connectGoogle, disconnectGoogle, exportBackupFile, pickBackupFile, restoreFromFile, restoreFromSheet, sheetUrl } from '@/lib/backup';
 import { clearPin } from '@/lib/lock';
-import { clearAllData, loadDemoData } from '@/lib/demo';
+import { useLicense } from '@/context/license';
 import { fmtDate, toISO } from '@/lib/dates';
 import { C } from '@/theme';
 
 export default function Settings() {
   const db = useSQLiteContext();
   const { settings, updateSetting, gyms, reload, setGymId } = useApp();
-  const [busy, setBusy] = useState<'backup' | 'restore' | 'connect' | 'demo' | 'clear' | null>(null);
+  const { view: license } = useLicense();
+  const [busy, setBusy] = useState<'backup' | 'restore' | 'connect' | 'file' | null>(null);
   const [upi, setUpi] = useState(settings.upi_id);
   const [prefix, setPrefix] = useState(settings.receipt_prefix);
 
@@ -48,55 +49,47 @@ export default function Settings() {
     } finally { setBusy(null); }
   };
 
-  const runRestore = () => Alert.alert('Restore from Google Sheets?', 'Everything on this phone will be replaced with the data in your backup sheet.', [
-    { text: 'Cancel', style: 'cancel' },
-    {
-      text: 'Restore', style: 'destructive', onPress: async () => {
-        setBusy('restore');
-        try {
-          const r = await restoreFromSheet(db);
-          await reload();
-          Alert.alert('Restored', `${r.members} members and ${r.payments} payments restored.`);
-        } catch (e: any) {
-          Alert.alert('Restore failed', e?.message ?? 'Try again.');
-        } finally { setBusy(null); }
+  const confirmRestore = (from: string, run: () => Promise<{ members: number; payments: number }>) =>
+    Alert.alert(`Restore from ${from}?`, 'Everything on this phone will be replaced with the data in the backup. Your license and app lock are not changed.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Restore', style: 'destructive', onPress: async () => {
+          setBusy('restore');
+          try {
+            const r = await run();
+            setGymId(null);
+            await reload();
+            Alert.alert('Restored', `${r.members} members and ${r.payments} payments restored.`);
+          } catch (e: any) {
+            Alert.alert('Restore failed', e?.message ?? 'Try again.');
+          } finally { setBusy(null); }
+        },
       },
-    },
+    ]);
+
+  const restoreFromPhone = async () => {
+    try {
+      const picked = await pickBackupFile();
+      if (picked) confirmRestore(`“${picked.name}”`, () => restoreFromFile(db, picked.byTab));
+    } catch (e: any) {
+      Alert.alert('Could not open the file', e?.message ?? 'Try another file.');
+    }
+  };
+
+  const runRestore = () => Alert.alert('Restore from', 'Choose where your backup is.', [
+    ...(connected ? [{ text: 'Google Drive (MyGym Backup sheet)', onPress: () => confirmRestore('Google Drive', () => restoreFromSheet(db)) }] : []),
+    { text: 'A file on this phone (.xlsx)', onPress: restoreFromPhone },
+    { text: 'Cancel', style: 'cancel' as const },
   ]);
 
-  const runDemo = () => Alert.alert('Load demo data?', 'Replaces everything on this phone with 3 sample gyms, 300 members and their payments. Use this only for testing.', [
-    { text: 'Cancel', style: 'cancel' },
-    {
-      text: 'Load demo data', style: 'destructive', onPress: async () => {
-        setBusy('demo');
-        try {
-          const r = await loadDemoData(db);
-          setGymId(null);
-          await reload();
-          Alert.alert('Demo data loaded', `${r.gyms} gyms, ${r.members} members and ${r.payments} payments added.`);
-        } catch (e: any) {
-          Alert.alert('Could not load demo data', e?.message ?? 'Try again.');
-        } finally { setBusy(null); }
-      },
-    },
-  ]);
-
-  const runClear = () => Alert.alert('Delete all data?', 'Removes every gym, member and payment from this phone. Your settings and Google backup sheet are kept. This cannot be undone.', [
-    { text: 'Cancel', style: 'cancel' },
-    {
-      text: 'Delete everything', style: 'destructive', onPress: async () => {
-        setBusy('clear');
-        try {
-          await clearAllData(db);
-          setGymId(null);
-          await reload();
-          Alert.alert('All data deleted', 'You can now add your real gyms and members.');
-        } catch (e: any) {
-          Alert.alert('Could not delete', e?.message ?? 'Try again.');
-        } finally { setBusy(null); }
-      },
-    },
-  ]);
+  const saveToPhone = async () => {
+    setBusy('file');
+    try {
+      await exportBackupFile(db);
+    } catch (e: any) {
+      Alert.alert('Could not save the backup', e?.message ?? 'Try again.');
+    } finally { setBusy(null); }
+  };
 
   const toggleLock = async (on: boolean) => {
     if (on) router.push('/pin');
@@ -106,12 +99,22 @@ export default function Settings() {
     }
   };
 
+  const licSub = !license ? 'Checking…'
+    : license.state === 'active' ? (license.license?.expires ? `${license.license.planName} · valid till ${fmtDate(license.license.expires, true)}` : 'Lifetime license')
+    : license.state === 'trial' ? `Free trial · ${license.daysLeft} ${license.daysLeft === 1 ? 'day' : 'days'} left`
+    : 'Expired · tap to renew';
+
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <IconButton name="chevron-left" label="Back" onPress={() => router.back()} />
         <Text style={{ fontSize: 22, fontWeight: '700', color: C.ink }}>Settings</Text>
       </View>
+
+      <Section>License</Section>
+      <Card style={{ paddingVertical: 4 }}>
+        <NavItem label="MyGym license" sub={licSub} onPress={() => router.push('/license')} last />
+      </Card>
 
       <Section>Backup to Google Sheets</Section>
       <Card style={{ gap: 14 }}>
@@ -143,12 +146,8 @@ export default function Settings() {
                 <Chip title="Weekly" active={freq === 'weekly'} onPress={() => updateSetting('backup_freq', 'weekly')} />
               </View>
             )}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button title="Backup now" kind="green" style={{ flex: 1, height: 48 }} loading={busy === 'backup'} onPress={runBackup}
-                icon={<Feather name="upload" size={16} color="#FFF" />} />
-              <Button title="Restore" kind="outline" style={{ flex: 1, height: 48 }} loading={busy === 'restore'} onPress={runRestore}
-                icon={<Feather name="download" size={16} color={C.ink} />} />
-            </View>
+            <Button title="Backup now" kind="green" style={{ height: 48 }} loading={busy === 'backup'} onPress={runBackup}
+              icon={<Feather name="upload" size={16} color="#FFF" />} />
             {!!settings.backup_sheet_id && (
               <Text onPress={() => Linking.openURL(sheetUrl(settings.backup_sheet_id))} style={{ color: C.brand, fontWeight: '600', fontSize: 13 }}>
                 Open sheet in Google Sheets
@@ -157,6 +156,17 @@ export default function Settings() {
           </>
         )}
         <Muted>Member photos stay on this phone; they are not copied to the sheet.</Muted>
+      </Card>
+
+      <Section>Backup file & restore</Section>
+      <Card style={{ gap: 12 }}>
+        <Muted>Save all gyms, members and payments as an Excel file you can keep in Files, Google Drive or WhatsApp. Restore from that file or from your Google backup sheet.</Muted>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button title="Save to phone" kind="dark" style={{ flex: 1, height: 48 }} loading={busy === 'file'} onPress={saveToPhone}
+            icon={<Feather name="save" size={16} color="#FFF" />} />
+          <Button title="Restore" kind="outline" style={{ flex: 1, height: 48 }} loading={busy === 'restore'} onPress={runRestore}
+            icon={<Feather name="download" size={16} color={C.ink} />} />
+        </View>
       </Card>
 
       <Section>Security</Section>
@@ -187,15 +197,6 @@ export default function Settings() {
           </View>
         </View>
         <NavItem label="WhatsApp message templates" sub="Reminder and receipt" onPress={() => router.push('/templates')} last />
-      </Card>
-
-      <Section>Testing</Section>
-      <Card style={{ gap: 12 }}>
-        <Muted>Fill the app with 3 sample gyms and 100 members each, with random plans, payments, balances and due dates, to try out Reports and Reminders.</Muted>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button title="Load demo data" kind="dark" style={{ flex: 1, height: 48 }} loading={busy === 'demo'} onPress={runDemo} />
-          <Button title="Delete all data" kind="danger" style={{ flex: 1, height: 48 }} loading={busy === 'clear'} onPress={runClear} />
-        </View>
       </Card>
 
       <Muted style={{ textAlign: 'center', marginTop: 8 }}>MyGym 1.0 · data is stored on this phone</Muted>

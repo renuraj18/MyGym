@@ -18,6 +18,8 @@ export interface Env {
   PAYMENT_INFO?: string;
   PRICE_YEARLY?: string;
   PRICE_LIFETIME?: string;
+  UPI_ID?: string;
+  WHATSAPP?: string;
 }
 
 type Plan = 'yearly' | 'lifetime';
@@ -92,6 +94,8 @@ function plansInfo(env: Env) {
       { id: 'lifetime', name: 'Lifetime', summary: 'Pay once, never expires', price: env.PRICE_LIFETIME?.trim() || '' },
     ],
     paymentInfo: env.PAYMENT_INFO?.trim() || DEFAULT_PAYMENT_INFO,
+    upi: env.UPI_ID?.trim() || '',
+    whatsapp: (env.WHATSAPP ?? '').replace(/\D/g, ''),
   };
 }
 

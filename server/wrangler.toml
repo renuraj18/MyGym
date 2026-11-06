@@ -11,6 +11,8 @@ id = "7e283766fbf04a70b9498ccb909af102"
 [vars]
 PRICE_YEARLY = ""
 PRICE_LIFETIME = ""
+UPI_ID = ""
+WHATSAPP = ""
 PAYMENT_INFO = "Pay by GPay / UPI and send the payment screenshot on WhatsApp. You will receive a license key to enter in the app."
 
 # ADMIN_PASSWORD is a secret (set from the GitHub secret of the same name by the deploy workflow).

@@ -13,10 +13,12 @@ import { displayPhone, inr } from '@/lib/format';
 import { choosePhoto } from '@/lib/photos';
 import { openWhatsApp, receiptText, reminderText } from '@/lib/whatsapp';
 import { C } from '@/theme';
+import { useLicense } from '@/context/license';
 
 export default function MemberDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
+  const { requireEdit } = useLicense();
   const { settings } = useApp();
   const [m, setM] = useState<Member | null>(null);
   const [pays, setPays] = useState<Payment[]>([]);
@@ -53,7 +55,7 @@ export default function MemberDetail() {
     ];
     if (latest) {
       buttons.push({
-        text: 'Delete this payment', style: 'destructive', onPress: () =>
+        text: 'Delete this payment', style: 'destructive', onPress: () => requireEdit() &&
           Alert.alert('Delete payment?', `${p.receipt_no} · ${inr(p.amount)} will be removed and the member’s dates put back.`, [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Delete', style: 'destructive', onPress: async () => { await deleteLatestPayment(db, p); load(); } },
@@ -68,8 +70,8 @@ export default function MemberDetail() {
     Alert.alert(m.name, undefined, [
       { text: 'Edit details', onPress: () => router.push({ pathname: '/member/new', params: { id: String(m.id) } }) },
       m.active
-        ? { text: 'Mark as left the gym', style: 'destructive', onPress: async () => { await setMemberActive(db, m.id, false); router.back(); } }
-        : { text: 'Mark as active again', onPress: async () => { await setMemberActive(db, m.id, true); load(); } },
+        ? { text: 'Mark as left the gym', style: 'destructive', onPress: async () => { if (!requireEdit()) return; await setMemberActive(db, m.id, false); router.back(); } }
+        : { text: 'Mark as active again', onPress: async () => { if (!requireEdit()) return; await setMemberActive(db, m.id, true); load(); } },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };

@@ -1,7 +1,12 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import Constants from 'expo-constants';
 import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
+import * as XLSX from 'xlsx';
 import { getSettings, setSetting } from '@/db/repo';
+import { today } from '@/lib/dates';
 
 const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
 const SCOPES = [DRIVE_FILE];
@@ -106,26 +111,35 @@ async function columns(db: SQLiteDatabase, table: string): Promise<string[]> {
 
 export type BackupResult = { members: number; payments: number; at: string };
 
-export async function backupNow(db: SQLiteDatabase, interactive = true): Promise<BackupResult> {
-  const tok = await token(interactive);
-  const id = await ensureSheet(db, tok);
-  const data: { range: string; values: (string | number)[][] }[] = [];
+type Snapshot = { byTab: Record<string, (string | number)[][]>; members: number; payments: number };
+
+/** Every table as rows with a header row, the same layout in the Google sheet and in backup files. */
+async function snapshot(db: SQLiteDatabase): Promise<Snapshot> {
+  const byTab: Snapshot['byTab'] = {};
   const counts: Record<string, number> = {};
   for (const t of TABLES) {
     const cols = await columns(db, t);
     let rows = await db.getAllAsync<Record<string, any>>(`SELECT * FROM ${t}`);
     if (t === 'settings') rows = rows.filter((r) => !LOCAL_ONLY_SETTINGS.has(r.key));
     counts[t] = rows.length;
-    data.push({ range: `${TAB[t]}!A1`, values: [cols, ...rows.map((r) => cols.map((c) => (r[c] ?? '') as string | number))] });
+    byTab[t] = [cols, ...rows.map((r) => cols.map((c) => (r[c] ?? '') as string | number))];
   }
+  return { byTab, members: counts.members, payments: counts.payments };
+}
+
+export async function backupNow(db: SQLiteDatabase, interactive = true): Promise<BackupResult> {
+  const tok = await token(interactive);
+  const id = await ensureSheet(db, tok);
+  const snap = await snapshot(db);
+  const data = TABLES.map((t) => ({ range: `${TAB[t]}!A1`, values: snap.byTab[t] }));
   await api(tok, `${SHEETS}/${id}/values:batchClear`, 'POST', { ranges: TABLES.map((t) => TAB[t]) });
   await api(tok, `${SHEETS}/${id}/values:batchUpdate`, 'POST', { valueInputOption: 'RAW', data });
   const at = new Date().toISOString();
   await setSetting(db, 'last_backup', at);
-  return { members: counts.members, payments: counts.payments, at };
+  return { members: snap.members, payments: snap.payments, at };
 }
 
-/** Replaces everything on this phone with what is in the backup sheet. */
+/** Replaces everything on this phone with what is in the Google backup sheet. */
 export async function restoreFromSheet(db: SQLiteDatabase): Promise<BackupResult> {
   const tok = await token(true);
   const s = await getSettings(db);
@@ -134,26 +148,92 @@ export async function restoreFromSheet(db: SQLiteDatabase): Promise<BackupResult
   const res = await api(tok, `${SHEETS}/${s.backup_sheet_id}/values:batchGet?${qs}&valueRenderOption=UNFORMATTED_VALUE`);
   const byTab: Record<string, any[][]> = {};
   TABLES.forEach((t, i) => { byTab[t] = res.valueRanges?.[i]?.values ?? []; });
-  if ((byTab.gyms?.length ?? 0) < 2) throw new Error('The backup sheet has no gyms in it, so nothing was restored.');
+  return restoreRows(db, byTab, 'The backup sheet has no gyms in it, so nothing was restored.');
+}
 
+/** Saves a backup as an Excel file and opens the share sheet (save to Files, Drive, WhatsApp…). */
+export async function exportBackupFile(db: SQLiteDatabase): Promise<BackupResult & { name: string }> {
+  const snap = await snapshot(db);
+  const wb = XLSX.utils.book_new();
+  for (const t of TABLES) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(snap.byTab[t]), TAB[t]);
+  const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  const name = `MyGym-Backup-${today()}.xlsx`;
+  const uri = `${FileSystem.cacheDirectory}${name}`;
+  await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      dialogTitle: 'Save MyGym backup',
+      UTI: 'org.openxmlformats.spreadsheetml.sheet',
+    });
+  }
+  return { members: snap.members, payments: snap.payments, at: new Date().toISOString(), name };
+}
+
+/** Lets the owner pick a backup file (.xlsx from this app, or the Google sheet downloaded as Excel). Null if cancelled. */
+export async function pickBackupFile(): Promise<{ name: string; byTab: Record<string, any[][]> } | null> {
+  const res = await DocumentPicker.getDocumentAsync({
+    type: [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/octet-stream',
+    ],
+    copyToCacheDirectory: true,
+    multiple: false,
+  });
+  if (res.canceled || !res.assets?.length) return null;
+  const file = res.assets[0];
+  if (!/\.xlsx?$/i.test(file.name)) throw new Error('Choose a MyGym backup Excel file (.xlsx).');
+  const b64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+  const wb = XLSX.read(b64, { type: 'base64' });
+  const byTab: Record<string, any[][]> = {};
+  for (const t of TABLES) {
+    const sheetName = wb.SheetNames.find((n) => n.trim().toLowerCase() === TAB[t].toLowerCase());
+    byTab[t] = sheetName ? XLSX.utils.sheet_to_json<any[]>(wb.Sheets[sheetName], { header: 1, raw: true, defval: '' }) : [];
+  }
+  if (!byTab.gyms.length && !byTab.members.length) {
+    throw new Error('This file is not a MyGym backup. It needs Gyms, Members and Payments tabs.');
+  }
+  return { name: file.name, byTab };
+}
+
+export async function restoreFromFile(db: SQLiteDatabase, byTab: Record<string, any[][]>): Promise<BackupResult> {
+  return restoreRows(db, byTab, 'The backup file has no gyms in it, so nothing was restored.');
+}
+
+const DATE_COL = /(_on|_till|_from|_to|^period_)/;
+/** Excel may turn date text into day numbers if the file was edited; turn those back into YYYY-MM-DD. */
+function cleanCell(col: string, v: any) {
+  if (v === '' || v === undefined) return null;
+  if (typeof v === 'number' && DATE_COL.test(col) && v > 20000 && v < 80000) {
+    return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);
+  }
+  return v;
+}
+
+async function restoreRows(db: SQLiteDatabase, byTab: Record<string, any[][]>, emptyMsg: string): Promise<BackupResult> {
+  if ((byTab.gyms?.length ?? 0) < 2) throw new Error(emptyMsg);
   await db.withExclusiveTransactionAsync(async (tx) => {
     // Delete children first and insert parents first (TABLES order), so foreign keys stay valid.
     for (const t of ['payments', 'members', 'gyms'] as const) await tx.runAsync(`DELETE FROM ${t}`);
     await tx.runAsync(`DELETE FROM settings WHERE key NOT IN ('google_email','backup_sheet_id','last_backup')`);
     for (const t of TABLES) {
-      const [header, ...rows] = byTab[t];
+      const [header, ...rows] = byTab[t] ?? [];
       if (!header) continue;
+      const head = (header as any[]).map((h) => String(h).trim());
       const valid = new Set(await columns(tx as unknown as SQLiteDatabase, t));
-      const cols = (header as string[]).filter((c) => valid.has(c));
-      const idx = cols.map((c) => (header as string[]).indexOf(c));
+      const cols = head.filter((c) => valid.has(c));
+      const idx = cols.map((c) => head.indexOf(c));
       const sql = `INSERT OR REPLACE INTO ${t} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`;
       for (const r of rows) {
+        if (!r || r.every((v: any) => v === '' || v === undefined || v === null)) continue;
         if (t === 'settings' && LOCAL_ONLY_SETTINGS.has(String(r[idx[cols.indexOf('key')]]))) continue;
-        await tx.runAsync(sql, ...idx.map((i) => (r[i] === '' || r[i] === undefined ? null : r[i])));
+        await tx.runAsync(sql, ...idx.map((i, k) => cleanCell(cols[k], r[i])));
       }
     }
   });
-  return { members: Math.max(0, byTab.members.length - 1), payments: Math.max(0, byTab.payments.length - 1), at: new Date().toISOString() };
+  const count = (t: string) => (byTab[t] ?? []).slice(1).filter((r) => r && r.some((v: any) => v !== '' && v != null)).length;
+  return { members: count('members'), payments: count('payments'), at: new Date().toISOString() };
 }
 
 export function sheetUrl(id: string) {

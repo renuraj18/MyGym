@@ -14,9 +14,11 @@
     "@react-native-community/datetimepicker": "8.4.1",
     "@react-native-google-signin/google-signin": "^15.0.0",
     "expo": "~53.0.0",
+    "expo-application": "~6.1.0",
     "expo-asset": "~11.1.7",
     "expo-constants": "~17.1.0",
     "expo-dev-client": "~5.2.0",
+    "expo-document-picker": "~13.1.0",
     "expo-file-system": "~18.1.0",
     "expo-font": "~13.3.2",
     "expo-image-picker": "~16.1.0",
@@ -32,7 +34,8 @@
     "react": "19.0.0",
     "react-native": "0.79.6",
     "react-native-safe-area-context": "5.4.0",
-    "react-native-screens": "~4.11.0"
+    "react-native-screens": "~4.11.0",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
