@@ -3,7 +3,10 @@ import Constants from 'expo-constants';
 import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
 import { getSettings, setSetting } from '@/db/repo';
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
+const SCOPES = [DRIVE_FILE];
+const NO_DRIVE_PERMISSION =
+  'Google Drive permission was not given. Tap Connect again and tick the box for "Google Drive files that you use with this app".';
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets';
 const TABLES = ['gyms', 'members', 'payments', 'settings'] as const;
 const TAB: Record<(typeof TABLES)[number], string> = { gyms: 'Gyms', members: 'Members', payments: 'Payments', settings: 'Settings' };
@@ -23,7 +26,14 @@ export async function connectGoogle(): Promise<string | null> {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const res = await GoogleSignin.signIn();
   if (!isSuccessResponse(res)) return null;
+  // Google lets people untick individual permissions; without Drive the backup can't be written.
+  if (!res.data.scopes?.includes(DRIVE_FILE)) await askForDrive();
   return res.data.user.email;
+}
+
+async function askForDrive() {
+  const r = await GoogleSignin.addScopes({ scopes: SCOPES });
+  if (!r || !isSuccessResponse(r) || !r.data.scopes?.includes(DRIVE_FILE)) throw new Error(NO_DRIVE_PERMISSION);
 }
 
 export async function disconnectGoogle() {
@@ -31,10 +41,14 @@ export async function disconnectGoogle() {
   try { await GoogleSignin.signOut(); } catch { /* already signed out */ }
 }
 
-async function token(): Promise<string> {
+async function token(interactive: boolean): Promise<string> {
   configure();
   const silent = await GoogleSignin.signInSilently();
   if (silent.type !== 'success') throw new Error('Google account is not connected. Connect it in Settings.');
+  if (!silent.data.scopes?.includes(DRIVE_FILE)) {
+    if (!interactive) throw new Error(NO_DRIVE_PERMISSION);
+    await askForDrive();
+  }
   const t = await GoogleSignin.getTokens();
   return t.accessToken;
 }
@@ -47,6 +61,9 @@ async function api(tok: string, url: string, method = 'GET', body?: unknown) {
   });
   if (!r.ok) {
     const text = await r.text();
+    if (r.status === 403 && /PERMISSION_DENIED|insufficient|does not have permission/i.test(text)) {
+      throw new Error(NO_DRIVE_PERMISSION);
+    }
     throw new Error(`Google Sheets error ${r.status}: ${text.slice(0, 200)}`);
   }
   return r.json();
@@ -75,8 +92,8 @@ async function columns(db: SQLiteDatabase, table: string): Promise<string[]> {
 
 export type BackupResult = { members: number; payments: number; at: string };
 
-export async function backupNow(db: SQLiteDatabase): Promise<BackupResult> {
-  const tok = await token();
+export async function backupNow(db: SQLiteDatabase, interactive = true): Promise<BackupResult> {
+  const tok = await token(interactive);
   const id = await ensureSheet(db, tok);
   const data: { range: string; values: (string | number)[][] }[] = [];
   const counts: Record<string, number> = {};
@@ -96,7 +113,7 @@ export async function backupNow(db: SQLiteDatabase): Promise<BackupResult> {
 
 /** Replaces everything on this phone with what is in the backup sheet. */
 export async function restoreFromSheet(db: SQLiteDatabase): Promise<BackupResult> {
-  const tok = await token();
+  const tok = await token(true);
   const s = await getSettings(db);
   if (!s.backup_sheet_id) throw new Error('No backup sheet found. Run a backup first, or reconnect the account that has it.');
   const qs = TABLES.map((t) => `ranges=${encodeURIComponent(TAB[t])}`).join('&');
@@ -141,7 +158,7 @@ export async function maybeAutoBackup(db: SQLiteDatabase, reason: 'open' | 'paym
       const gap = s.backup_freq === 'weekly' ? 7 * 86400000 : s.backup_freq === 'daily' ? 86400000 : 86400000;
       if (Date.now() - last < gap) return;
     }
-    await backupNow(db);
+    await backupNow(db, false);
   } catch {
     // Offline or token expired: the next open will try again.
   }
