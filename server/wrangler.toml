@@ -9,8 +9,8 @@ id = "7e283766fbf04a70b9498ccb909af102"
 
 # Shown in the app's License screen. Change these and redeploy; no app update needed.
 [vars]
-PRICE_YEARLY = ""
-PRICE_LIFETIME = ""
+PRICE_YEARLY = "₹500"
+PRICE_LIFETIME = "₹2,000"
 UPI_ID = "9632982245@ybl"
 WHATSAPP = "919632982245"
 PAYMENT_INFO = "Pay by GPay / UPI and send the payment screenshot on WhatsApp. You will receive a license key to enter in the app."
