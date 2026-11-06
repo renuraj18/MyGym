@@ -1,0 +1,16 @@
+name = "mygym-license"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "LICENSES"
+id = "7e283766fbf04a70b9498ccb909af102"
+
+# Shown in the app's License screen. Change these and redeploy; no app update needed.
+[vars]
+PRICE_YEARLY = ""
+PRICE_LIFETIME = ""
+PAYMENT_INFO = "Pay by GPay / UPI and send the payment screenshot on WhatsApp. You will receive a license key to enter in the app."
+
+# ADMIN_PASSWORD is a secret (set from the GitHub secret of the same name by the deploy workflow).

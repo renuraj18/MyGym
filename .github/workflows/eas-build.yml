@@ -6,6 +6,8 @@ on:
     paths-ignore:
       - "README.md"
       - "docs/**"
+      - "server/**"
+      - ".github/workflows/license-server.yml"
   workflow_dispatch:
     inputs:
       profile:
