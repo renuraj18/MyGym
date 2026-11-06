@@ -7,8 +7,13 @@ import { useApp } from '@/context/app';
 import { backupNow, connectGoogle, disconnectGoogle, exportBackupFile, pickBackupFile, restoreFromFile, restoreFromSheet, sheetUrl } from '@/lib/backup';
 import { clearPin } from '@/lib/lock';
 import { useLicense } from '@/context/license';
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { fmtDate, toISO } from '@/lib/dates';
 import { C } from '@/theme';
+
+const SUPPORT = String((Constants.expoConfig?.extra as any)?.supportPhone ?? '9632982245');
+const VERSION = `${Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '1.0.0'} (build ${Application.nativeBuildVersion ?? '–'})`;
 
 export default function Settings() {
   const db = useSQLiteContext();
@@ -199,7 +204,31 @@ export default function Settings() {
         <NavItem label="WhatsApp message templates" sub="Reminder and receipt" onPress={() => router.push('/templates')} last />
       </Card>
 
-      <Muted style={{ textAlign: 'center', marginTop: 8 }}>MyGym 1.0 · data is stored on this phone</Muted>
+      <Section>Help & about</Section>
+      <Card style={{ gap: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: C.brandSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Feather name="phone" size={20} color={C.brand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontWeight: '600', fontSize: 14, color: C.ink }}>Support</Text>
+            <Muted>+91 {SUPPORT.slice(0, 5)} {SUPPORT.slice(5)}</Muted>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button title="Call" kind="outline" style={{ flex: 1, height: 44 }} onPress={() => Linking.openURL(`tel:+91${SUPPORT}`)}
+            icon={<Feather name="phone-call" size={16} color={C.ink} />} />
+          <Button title="WhatsApp" kind="green" style={{ flex: 1, height: 44 }}
+            onPress={() => Linking.openURL(`https://wa.me/91${SUPPORT}?text=${encodeURIComponent(`Hi, I need help with MyGym (version ${VERSION}).`)}`)}
+            icon={<Feather name="message-circle" size={16} color="#FFF" />} />
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Muted>App version</Muted>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: C.ink }}>{VERSION}</Text>
+        </View>
+      </Card>
+
+      <Muted style={{ textAlign: 'center', marginTop: 8 }}>MyGym · data is stored on this phone</Muted>
     </Screen>
   );
 }
