@@ -14,6 +14,7 @@ const TAB: Record<(typeof TABLES)[number], string> = { gyms: 'Gyms', members: 'M
 const LOCAL_ONLY_SETTINGS = new Set(['google_email', 'backup_sheet_id', 'last_backup']);
 
 let configured = false;
+let currentToken = '';
 function configure() {
   if (configured) return;
   const webClientId = (Constants.expoConfig?.extra as any)?.googleWebClientId as string | undefined;
@@ -38,6 +39,10 @@ async function askForDrive() {
 
 export async function disconnectGoogle() {
   configure();
+  try {
+    const t = await GoogleSignin.getTokens();
+    await GoogleSignin.clearCachedAccessToken(t.accessToken);
+  } catch { /* not signed in */ }
   try { await GoogleSignin.signOut(); } catch { /* already signed out */ }
 }
 
@@ -50,17 +55,26 @@ async function token(interactive: boolean): Promise<string> {
     await askForDrive();
   }
   const t = await GoogleSignin.getTokens();
+  currentToken = t.accessToken;
   return t.accessToken;
 }
 
 async function api(tok: string, url: string, method = 'GET', body?: unknown) {
-  const r = await fetch(url, {
+  const send = (t: string) => fetch(url, {
     method,
-    headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
+  let r = await send(currentToken || tok);
+  if (r.status === 401) {
+    // Android caches access tokens; a revoked or expired one must be cleared before a new one is issued.
+    try { await GoogleSignin.clearCachedAccessToken(currentToken || tok); } catch { /* ignore */ }
+    currentToken = (await GoogleSignin.getTokens()).accessToken;
+    r = await send(currentToken);
+  }
   if (!r.ok) {
     const text = await r.text();
+    if (r.status === 401) throw new Error('Google sign-in has expired. Tap Disconnect, then Connect again.');
     if (r.status === 403 && /PERMISSION_DENIED|insufficient|does not have permission/i.test(text)) {
       throw new Error(NO_DRIVE_PERMISSION);
     }
